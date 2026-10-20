@@ -8,7 +8,7 @@ An open-source website audit and lead-research tool. Upload a CSV of website URL
 
 ## How it works
 
-```
+``` 
 CSV of URLs -> robots.txt check -> fetch page (server side) -> Gemini: design rating, tech rating, contact extraction
                                                            -> results table -> CSV download / Google Sheet rows
 ```
