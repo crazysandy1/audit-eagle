@@ -48,7 +48,7 @@ function isPrivateIPv6(ip: string): boolean {
 }
 
 /** Block loopback, private, link-local and metadata addresses (SSRF protection). */
-async function assertPublicHost(hostname: string): Promise<void> {
+export async function assertPublicHost(hostname: string): Promise<void> {
   const host = hostname.replace(/^\[|\]$/g, '');
   if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.internal')) {
     throw new ScanError('Refusing to scan a local or internal host.');
@@ -175,15 +175,8 @@ function findPhones(html: string, text: string): string[] {
   return [...found].slice(0, 3);
 }
 
-/**
- * Fetches a page and returns a plain-text description of what was found.
- * The text is the input for the AI rating and contact-extraction steps.
- */
-export async function scanWebsiteReal(input: string): Promise<string> {
-  const start = normalizeUrl(input);
-  const { html, finalUrl, status, headers } = await fetchPage(start);
-  if (status >= 400) throw new ScanError(`The site answered with HTTP ${status}.`);
-
+/** Pure analysis step: turns fetched HTML and headers into the text description used by the AI steps. */
+export function analyzeHtml(html: string, finalUrl: URL, status: number, headers: Headers): string {
   const text = stripTags(html);
   const title = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.replace(/\s+/g, ' ').trim();
   const description = metaContent(html, 'name', 'description');
@@ -216,4 +209,79 @@ export async function scanWebsiteReal(input: string): Promise<string> {
     `Visible text excerpt: ${text.slice(0, 700)}`,
   ];
   return lines.join('\n');
+}
+
+/** Parses robots.txt and answers whether `path` may be fetched by our user agent. */
+export function isAllowedByRobots(robotsTxt: string, path: string, agent = 'auditeaglebot'): boolean {
+  type Group = { agents: string[]; rules: Array<{ allow: boolean; path: string }> };
+  const groups: Group[] = [];
+  let current: Group | null = null;
+  let lastWasAgent = false;
+  for (const raw of robotsTxt.split(/\r?\n/)) {
+    const line = raw.replace(/#.*/, '').trim();
+    const idx = line.indexOf(':');
+    if (idx === -1) continue;
+    const key = line.slice(0, idx).trim().toLowerCase();
+    const value = line.slice(idx + 1).trim();
+    if (key === 'user-agent') {
+      if (!current || !lastWasAgent) {
+        current = { agents: [], rules: [] };
+        groups.push(current);
+      }
+      current.agents.push(value.toLowerCase());
+      lastWasAgent = true;
+    } else if ((key === 'allow' || key === 'disallow') && current) {
+      current.rules.push({ allow: key === 'allow', path: value });
+      lastWasAgent = false;
+    } else {
+      lastWasAgent = false;
+    }
+  }
+  const specific = groups.filter((g) => g.agents.some((a) => a !== '*' && agent.includes(a)));
+  const applicable = specific.length ? specific : groups.filter((g) => g.agents.includes('*'));
+  let best: { allow: boolean; len: number } | null = null;
+  for (const group of applicable) {
+    for (const rule of group.rules) {
+      if (!rule.path) continue;
+      if (path.startsWith(rule.path) && (!best || rule.path.length > best.len || (rule.path.length === best.len && rule.allow))) {
+        best = { allow: rule.allow, len: rule.path.length };
+      }
+    }
+  }
+  return best ? best.allow : true;
+}
+
+/** Fetches /robots.txt (best effort) and refuses the scan when our user agent is disallowed. */
+async function assertAllowedByRobots(url: URL): Promise<void> {
+  if (process.env.AUDIT_IGNORE_ROBOTS === 'true') return;
+  try {
+    await assertPublicHost(url.hostname);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6_000);
+    const res = await fetch(new URL('/robots.txt', url), {
+      redirect: 'follow',
+      signal: controller.signal,
+      headers: { 'user-agent': USER_AGENT },
+    }).finally(() => clearTimeout(timer));
+    if (!res.ok) return;
+    const text = (await readCapped(res)).slice(0, 200_000);
+    if (!isAllowedByRobots(text, url.pathname + url.search)) {
+      throw new ScanError('Blocked by the site robots.txt. Set AUDIT_IGNORE_ROBOTS=true only if you have permission.');
+    }
+  } catch (err) {
+    if (err instanceof ScanError) throw err;
+    // robots.txt missing or unreachable: treat as allowed
+  }
+}
+
+/**
+ * Fetches a page and returns a plain-text description of what was found.
+ * The text is the input for the AI rating and contact-extraction steps.
+ */
+export async function scanWebsiteReal(input: string): Promise<string> {
+  const start = normalizeUrl(input);
+  await assertAllowedByRobots(start);
+  const { html, finalUrl, status, headers } = await fetchPage(start);
+  if (status >= 400) throw new ScanError(`The site answered with HTTP ${status}.`);
+  return analyzeHtml(html, finalUrl, status, headers);
 }

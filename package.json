@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "description": "Website audit and lead-research tool: scan sites, rate them with Gemini, export to CSV or Google Sheets.",
-  "repository": { "type": "git", "url": "https://github.com/crazysandy1/audit-eagle.git" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/crazysandy1/audit-eagle.git"
+  },
   "scripts": {
     "dev": "next dev --turbopack",
     "genkit:dev": "genkit start -- tsx src/ai/dev.ts",
@@ -11,7 +14,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
     "@genkit-ai/googleai": "^1.8.0",
@@ -63,6 +67,24 @@
     "genkit-cli": "^1.8.0",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
+    "tsx": "^4.23.15",
     "typescript": "^5"
+  },
+  "license": "MIT",
+  "author": "Sandeep J S (https://github.com/crazysandy1)",
+  "bugs": {
+    "url": "https://github.com/crazysandy1/audit-eagle/issues"
+  },
+  "homepage": "https://github.com/crazysandy1/audit-eagle#readme",
+  "keywords": [
+    "website-audit",
+    "lead-generation",
+    "nextjs",
+    "genkit",
+    "gemini",
+    "scraper"
+  ],
+  "engines": {
+    "node": ">=20"
   }
 }
