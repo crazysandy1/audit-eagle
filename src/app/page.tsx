@@ -424,7 +424,7 @@ const Home: NextPage = () => {
                 <CardTitle className="font-headline text-2xl">Audit Results ({results.length} total)</CardTitle>
                 <CardDescription className="font-body">Review the scan and AI rating for each website. Batch CSVs (every ${BATCH_SIZE} URLs) are saved locally to <code>_audits_output/</code>.</CardDescription>
               </div>
-              <Button onClick={handleDownloadAllCSV} variant="outline">
+              <Button onClick={handleDownloadAllCSV} disabled={isProcessing || results.length === 0} variant="outline">
                 <Download className="mr-2 h-4 w-4" /> Download All Results CSV
               </Button>
             </CardHeader>
